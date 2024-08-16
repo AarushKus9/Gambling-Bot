@@ -1,0 +1,290 @@
+import discord
+from discord.ext import commands, tasks
+from datetime import datetime, timedelta
+import random
+import json
+import os
+
+intents = discord.Intents.default()
+intents.message_content = True
+
+class CustomHelpCommand(commands.HelpCommand):
+    async def send_pages(self):
+        destination = self.get_destination()
+        help_message = "Available commands:\n"
+        for command in self.bot.commands:
+            if not command.hidden:
+                help_message += f"`{command.name}`: {command.help}\n"
+        await destination.send(help_message)
+
+bot = commands.Bot(command_prefix="!", intents=intents, help_command=CustomHelpCommand())
+
+USER_DATA_FILE = 'user_data.json'
+DAILY_REWARD_FILE = 'daily_reward_data.json'
+
+def load_data():
+    if os.path.exists(USER_DATA_FILE):
+        with open(USER_DATA_FILE, 'r') as f:
+            user_data = json.load(f)
+    else:
+        user_data = {}
+
+    if os.path.exists(DAILY_REWARD_FILE):
+        with open(DAILY_REWARD_FILE, 'r') as f:
+            daily_reward_data = json.load(f)
+    else:
+        daily_reward_data = {}
+
+    return user_data, daily_reward_data
+
+def save_data(user_data, daily_reward_data):
+    with open(USER_DATA_FILE, 'w') as f:
+        json.dump(user_data, f, indent=4)
+
+    with open(DAILY_REWARD_FILE, 'w') as f:
+        json.dump(daily_reward_data, f, indent=4)
+
+user_data, daily_reward_data = load_data()
+
+AURA_TYPES = [
+    (100000, "😎 Rizz Aura"),
+    (10000, "💎 Diamond Aura"),
+    (9000, "🏆 Champion Aura"),
+    (8000, "🔥 Inferno Aura"),
+    (7000, "🌈 Rainbow Aura"),
+    (6000, "🎉 Celebration Aura"),
+    (5000, "🌟 Star Aura"),
+    (4000, "✨ Sparkle Aura"),
+    (3000, "💫 Cosmic Aura"),
+    (2000, "🌠 Galactic Aura"),
+    (1500, "💎 Crystal Aura"),
+    (1200, "⚡ Thunder Aura"),
+    (1000, "🌟 Stellar Aura"),
+    (900, "☄️ Meteor Aura"),
+    (800, "🌌 Nebula Aura"),
+    (700, "💥 Explosion Aura"),
+    (600, "🎆 Firework Aura"),
+    (500, "🌪️ Cyclone Aura"),
+    (400, "🌫️ Mist Aura"),
+    (300, "💧 Water Aura"),
+    (200, "🍃 Leaf Aura"),
+    (100, "🌿 Basic Aura"),
+    (1100, "🌅 Aurora Aura"),
+    (1200, "🌑 Eclipse Aura"),
+    (1300, "❄️ Frost Aura"),
+    (1400, "✨ Glimmer Aura"),
+    (1500, "🌠 Nova Aura"),
+    (1600, "☀️ Solar Aura"),
+    (1700, "🌜 Lunar Aura"),
+    (1800, "🌌 Nebula Aura"),
+    (1900, "👻 Phantom Aura"),
+    (2000, "⭐ Starlight Aura"),
+    (2100, "🌪️ Vortex Aura"),
+    (2200, "🌟 Zenith Aura"),
+    (2300, "🎶 Harmony Aura"),
+    (2400, "💫 Radiant Aura"),
+    (2500, "🌈 Spectrum Aura"),
+    (2600, "⛈️ Thunderstorm Aura"),
+    (2700, "🌩️ Tempest Aura"),
+    (2800, "🌆 Dusk Aura"),
+    (2900, "🌄 Dawn Aura"),
+    (3000, "🌌 Twilight Aura"),
+    (3100, "🌠 Celestial Aura"),
+    (3200, "🌠 Meteor Shower Aura"),
+    (3300, "🌌 Aurora Borealis Aura"),
+    (3400, "🌞 Solar Flare Aura"),
+    (3500, "🌌 Galactic Storm Aura"),
+    (3600, "🌠 Nebula Cloud Aura")
+]
+
+
+def get_aura(balance):
+    for threshold, aura in AURA_TYPES:
+        if balance >= threshold:
+            return aura
+    return "🌿 Basic Aura"
+
+@bot.event
+async def on_ready():
+    print(f'Logged in as {bot.user.name}')
+    check_daily_rewards.start()
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+
+    negative_phrases = [
+        "fucking bot",
+        "i hate the bot",
+        "i hate your bot",
+        "stupid bot"
+    ]
+
+    if any(phrase in message.content.lower() for phrase in negative_phrases):
+        await message.channel.send(f"Sorry if I did something to upset you, {message.author.mention}.")
+        return
+
+    await bot.process_commands(message)
+
+@bot.command()
+async def balance(ctx):
+    user = ctx.author
+    balance = user_data.get(str(user.id), 100)
+    aura = get_aura(balance)
+    await ctx.send(f"{user.mention}, your balance is {balance} coins. Your aura is: {aura}")
+
+@bot.command()
+async def gamble(ctx, amount: str):
+    user = ctx.author
+    balance = user_data.get(str(user.id), 100)
+
+    try:
+        amount = int(amount)
+    except ValueError:
+        await ctx.send(f"{user.mention}, please provide a valid number of coins to gamble.")
+        return
+
+    if amount <= 0:
+        await ctx.send(f"{user.mention}, you must gamble more than 0 coins!")
+        return
+
+    if balance == 2 and amount == 1:
+        outcome = 'win'
+    else:
+        if amount > balance - 2:
+            await ctx.send(f"{user.mention}, you can only gamble up to {balance - 2} coins to avoid going into debt!")
+            return
+
+        outcome = random.choice(['win', 'lose'])
+
+    if outcome == 'win':
+        winnings = amount * 2
+        balance += winnings
+        await ctx.send(f"{user.mention}, you won {winnings} coins!")
+    else:
+        balance -= amount
+        await ctx.send(f"{user.mention}, you lost {amount} coins!")
+
+    user_data[str(user.id)] = balance
+    save_data(user_data, daily_reward_data)
+
+@bot.command()
+async def gamble_max(ctx):
+    user = ctx.author
+    balance = user_data.get(str(user.id), 100)
+    max_gamble_amount = balance - 2
+
+    if max_gamble_amount <= 0:
+        await ctx.send(f"{user.mention}, you don't have enough coins to gamble!")
+        return
+
+    outcome = random.choice(['win', 'lose'])
+
+    if outcome == 'win':
+        winnings = max_gamble_amount * 2
+        balance += winnings
+        await ctx.send(f"{user.mention}, you won {winnings} coins by gambling the maximum amount!")
+    else:
+        balance -= max_gamble_amount
+        await ctx.send(f"{user.mention}, you lost {max_gamble_amount} coins by gambling the maximum amount!")
+
+    user_data[str(user.id)] = balance
+    save_data(user_data, daily_reward_data)
+
+
+@bot.command()
+async def reset(ctx, member: discord.Member):
+    if ctx.author.id not in [962462572412563458, 1237527666291114064]:
+        return
+
+    user_data[str(member.id)] = 100
+    save_data(user_data, daily_reward_data)
+    await ctx.send(f"Reset {member.mention}'s balance to 100 coins.")
+
+@bot.command()
+async def daily(ctx):
+    user = ctx.author
+    now = datetime.utcnow()
+    last_claim = daily_reward_data.get(str(user.id))
+
+    if last_claim:
+        last_claim_time = datetime.fromisoformat(last_claim)
+        time_since_last_claim = now - last_claim_time
+        if time_since_last_claim < timedelta(hours=24):
+            time_remaining = timedelta(hours=24) - time_since_last_claim
+            await ctx.send(f"{user.mention}, you have already claimed your daily reward. Please wait {time_remaining} before claiming again.")
+            return
+
+    user_data[str(user.id)] = user_data.get(str(user.id), 100) + 25
+    daily_reward_data[str(user.id)] = now.isoformat()
+    save_data(user_data, daily_reward_data)
+    await ctx.send(f"{user.mention}, you have claimed your daily reward of 25 coins! Your new balance is {user_data[str(user.id)]} coins.")
+
+@bot.command()
+async def leaderboard(ctx):
+    sorted_users = sorted(user_data.items(), key=lambda item: item[1], reverse=True)
+    leaderboard_message = "Leaderboard:\n"
+
+    for index, (user_id, balance) in enumerate(sorted_users[:10]):
+        user = bot.get_user(int(user_id))
+        if user is None:
+            user = await bot.fetch_user(int(user_id))
+        username = user.name if user else "Unknown"
+        aura = get_aura(balance)
+        leaderboard_message += f"{index + 1}. {username} - {balance} coins - Aura: {aura}\n"
+
+    await ctx.send(leaderboard_message)
+
+@bot.command()
+async def aura(ctx):
+    aura_message = "Aura Types and Their Prices:\n"
+    for threshold, aura in AURA_TYPES:
+        aura_message += f"{aura}: {threshold} coins\n"
+    await ctx.send(aura_message)
+
+@bot.command()
+async def add(ctx, amount: str, member: discord.Member):
+    if ctx.author.id not in [962462572412563458, 1237527666291114064]:
+        return
+
+    if not amount.isdigit():
+        await ctx.send("Please provide a valid amount.")
+        return
+
+    amount = int(amount)
+
+    if amount <= 0:
+        await ctx.send("Amount must be greater than 0.")
+        return
+
+    if amount > 10000:
+        amount = 10000
+
+    current_balance = user_data.get(str(member.id), 100) + amount
+    if current_balance > 10000:
+        current_balance = 6000
+
+    user_data[str(member.id)] = current_balance
+    save_data(user_data, daily_reward_data)
+
+    if random.randint(1, 100) == 1:
+        bonus = 10000
+        user_data[str(member.id)] += bonus
+        if user_data[str(member.id)] > 10000:
+            user_data[str(member.id)] = 10000
+        await ctx.send(f"{member.mention}, you received a 10,000 coin bonus! Your new balance is {user_data[str(member.id)]} coins.")
+    else:
+        await ctx.send(f"{member.mention}, added {amount} coins to their balance. Their new balance is {user_data[str(member.id)]} coins.")
+
+@tasks.loop(hours=1)
+async def check_daily_rewards():
+    now = datetime.utcnow()
+    for user_id in list(daily_reward_data.keys()):
+        last_claim = daily_reward_data[user_id]
+        last_claim_time = datetime.fromisoformat(last_claim)
+        if now - last_claim_time >= timedelta(hours=24):
+            daily_reward_data.pop(user_id)
+    save_data(user_data, daily_reward_data)
+
+bot.run('Bot-Token')
